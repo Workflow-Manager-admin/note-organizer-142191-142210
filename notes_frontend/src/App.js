@@ -175,6 +175,7 @@ function App() {
           className="sidebar-fab"
           title="Open navigation"
           aria-label="Open navigation"
+          data-testid="sidebar-fab"
           onClick={handleSidebarToggle}
         >
           ☰
@@ -210,12 +211,18 @@ function Sidebar({
           onClick={onToggle}
           title={open ? "Close navigation" : "Open navigation"}
           aria-label={open ? "Close navigation" : "Open navigation"}
+          data-testid="sidebar-toggle"
         >
           {open ? "←" : "☰"}
         </button>
       </div>
       <div className="Sidebar-controls">
-        <button className="btn btn-accent" onClick={onCreateNote}>
+        <button
+          className="btn btn-accent"
+          onClick={onCreateNote}
+          data-testid="create-note-btn"
+          aria-label="Add new note"
+        >
           + New Note
         </button>
         <input
@@ -225,11 +232,12 @@ function Sidebar({
           value={searchTerm}
           onChange={onSearchChange}
           aria-label="Search notes"
+          data-testid="sidebar-searchbox"
         />
       </div>
-      <ul className="Sidebar-notes-list">
+      <ul className="Sidebar-notes-list" data-testid="sidebar-notes-list">
         {notes.length === 0 && (
-          <li className="Sidebar-note-empty">
+          <li className="Sidebar-note-empty" data-testid="sidebar-note-empty">
             <span>No notes found.</span>
           </li>
         )}
@@ -241,8 +249,9 @@ function Sidebar({
             }
             key={note.id}
             onClick={() => onSelectNote(note)}
+            data-testid={`sidebar-note-${note.id}`}
           >
-            <div className="Sidebar-note-title">{note.title}</div>
+            <div className="Sidebar-note-title" data-testid={`sidebar-note-title-${note.id}`}>{note.title}</div>
             <div className="Sidebar-note-date">
               {new Date(note.updatedAt).toLocaleDateString()}{" "}
               {new Date(note.updatedAt).toLocaleTimeString([], {
@@ -260,6 +269,7 @@ function Sidebar({
             target="_blank"
             rel="noopener noreferrer"
             className="Sidebar-link"
+            data-testid="sidebar-footer-link"
           >
             React Notes App
           </a>
@@ -285,9 +295,9 @@ function MainContent({
 }) {
   if (mode === "create" || (mode === "edit" && note)) {
     return (
-      <main className="MainContent">
-        <form className="NoteForm" onSubmit={onSave} autoComplete="off">
-          <h2>{mode === "create" ? "Create Note" : "Edit Note"}</h2>
+      <main className="MainContent" data-testid="main-content">
+        <form className="NoteForm" onSubmit={onSave} autoComplete="off" data-testid="note-form">
+          <h2 data-testid="note-form-heading">{mode === "create" ? "Create Note" : "Edit Note"}</h2>
           <input
             className="NoteForm-title"
             type="text"
@@ -296,6 +306,8 @@ function MainContent({
             onChange={e => setEditTitle(e.target.value)}
             required
             autoFocus
+            data-testid="note-title-input"
+            aria-label="Note title input"
           />
           <textarea
             className="NoteForm-content"
@@ -303,12 +315,14 @@ function MainContent({
             placeholder="Write your note here..."
             value={editContent}
             onChange={e => setEditContent(e.target.value)}
+            data-testid="note-content-input"
+            aria-label="Note content input"
           />
           <div className="NoteForm-actions">
-            <button className="btn btn-primary" type="submit">
+            <button className="btn btn-primary" type="submit" data-testid="note-save-btn">
               Save
             </button>
-            <button className="btn btn-secondary" type="button" onClick={onCancel}>
+            <button className="btn btn-secondary" type="button" onClick={onCancel} data-testid="note-cancel-btn">
               Cancel
             </button>
           </div>
@@ -319,7 +333,7 @@ function MainContent({
 
   if (!note) {
     return (
-      <main className="MainContent MainContent--empty">
+      <main className="MainContent MainContent--empty" data-testid="main-content">
         <h2>Get Started</h2>
         <p>Select a note or create a new one.</p>
       </main>
@@ -328,10 +342,10 @@ function MainContent({
 
   // Default: display selected note
   return (
-    <main className="MainContent">
-      <div className="NoteDisplay">
+    <main className="MainContent" data-testid="main-content">
+      <div className="NoteDisplay" data-testid="note-display">
         <div className="NoteDisplay-meta">
-          <div className="NoteDisplay-date">
+          <div className="NoteDisplay-date" data-testid="note-display-date">
             Last updated:{" "}
             {new Date(note.updatedAt).toLocaleDateString()}{" "}
             {new Date(note.updatedAt).toLocaleTimeString([], {
@@ -340,13 +354,13 @@ function MainContent({
             })}
           </div>
         </div>
-        <h2 className="NoteDisplay-title">{note.title}</h2>
-        <pre className="NoteDisplay-content">{note.content}</pre>
+        <h2 className="NoteDisplay-title" data-testid="note-display-title">{note.title}</h2>
+        <pre className="NoteDisplay-content" data-testid="note-display-content">{note.content}</pre>
         <div className="NoteDisplay-actions">
-          <button className="btn btn-primary" onClick={onEdit}>
+          <button className="btn btn-primary" onClick={onEdit} data-testid="note-edit-btn">
             Edit
           </button>
-          <button className="btn btn-secondary" onClick={() => onDelete(note.id)}>
+          <button className="btn btn-secondary" onClick={() => onDelete(note.id)} data-testid="note-delete-btn">
             Delete
           </button>
         </div>

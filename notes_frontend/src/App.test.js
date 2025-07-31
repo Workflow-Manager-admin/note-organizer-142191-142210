@@ -3,30 +3,36 @@ import { render, screen, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import App from "./App";
 
-// Utilities
+/**
+ * Utilities to get robust references to all key UI parts of the app.
+ * Now uses data-testid for unambiguous selection.
+ */
 function setup() {
   render(<App />);
   const getSidebar = () => screen.getByRole("navigation");
-  const getSidebarNotes = () =>
-    within(getSidebar()).getAllByRole("listitem");
+  const getSidebarNotes = () => (
+    within(getSidebar()).queryAllByTestId(/^sidebar-note-/)
+  );
   const getCreateButton = () =>
-    within(getSidebar()).getByRole("button", { name: /\+ new note/i });
+    screen.getByTestId("create-note-btn");
   const getSearchInput = () =>
-    within(getSidebar()).getByRole("searchbox");
-  const getMainContent = () => screen.getByRole("main");
+    screen.getByTestId("sidebar-searchbox");
+  const getMainContent = () =>
+    screen.getByTestId("main-content");
   const getNoteTitleInput = () =>
-    screen.getByPlaceholderText(/title/i);
+    screen.getByTestId("note-title-input");
   const getNoteContentInput = () =>
-    screen.getByPlaceholderText(/write your note/i);
+    screen.getByTestId("note-content-input");
   const getSaveButton = () =>
-    screen.getByRole("button", { name: /^save$/i });
+    screen.getByTestId("note-save-btn");
   const getCancelButton = () =>
-    screen.getByRole("button", { name: /^cancel$/i });
-  // Edit/Delete button sometimes appears multiple times, make more specific via within main
+    screen.getByTestId("note-cancel-btn");
   const getEditButton = () =>
-    within(getMainContent()).getByRole("button", { name: /^edit$/i });
+    screen.queryByTestId("note-edit-btn");
   const getDeleteButton = () =>
-    within(getMainContent()).getByRole("button", { name: /^delete$/i });
+    screen.queryByTestId("note-delete-btn");
+  const getSidebarFab = () =>
+    screen.queryByTestId("sidebar-fab");
   return {
     getSidebar,
     getSidebarNotes,
@@ -39,6 +45,7 @@ function setup() {
     getCancelButton,
     getEditButton,
     getDeleteButton,
+    getSidebarFab,
   };
 }
 
@@ -60,23 +67,27 @@ describe("Notes App UI", () => {
       expect(getSidebarNotes().length).toBe(2);
     });
     const notes = getSidebarNotes();
-    expect(within(notes[0]).getByText(/organizer/i)).toBeInTheDocument();
-    expect(within(notes[1]).getByText(/features/i)).toBeInTheDocument();
+    expect(
+      within(notes[0]).getByTestId(/^sidebar-note-title-/)
+    ).toHaveTextContent("Welcome to Note Organizer");
+    expect(
+      within(notes[1]).getByTestId(/^sidebar-note-title-/)
+    ).toHaveTextContent("Features");
   });
 
   test("Selecting a note shows the note in main content", async () => {
-    const { getSidebarNotes, getMainContent } = setup();
+    const { getSidebarNotes, getMainContent, getEditButton, getDeleteButton } = setup();
     const user = userEvent.setup();
     const notes = getSidebarNotes();
     // Select the second "Features" note
     await user.click(notes[1]);
     await waitFor(() =>
-      expect(getMainContent()).toHaveTextContent(/features/i)
+      expect(within(getMainContent()).getByTestId("note-display-title")).toHaveTextContent("Features")
     );
-    expect(getMainContent()).toHaveTextContent(/beautiful, responsive ui/i);
+    expect(within(getMainContent()).getByTestId("note-display-content")).toHaveTextContent("Beautiful, responsive UI");
     // Action buttons present in main
-    expect(within(getMainContent()).getByRole("button", { name: /edit/i })).toBeInTheDocument();
-    expect(within(getMainContent()).getByRole("button", { name: /delete/i })).toBeInTheDocument();
+    expect(getEditButton()).toBeInTheDocument();
+    expect(getDeleteButton()).toBeInTheDocument();
   });
 
   test("Create new note shows form, creates note and displays in sidebar", async () => {
@@ -90,7 +101,7 @@ describe("Notes App UI", () => {
     const user = userEvent.setup();
 
     await user.click(getCreateButton());
-    expect(screen.getByRole("heading", { name: /create note/i })).toBeInTheDocument();
+    expect(screen.getByTestId("note-form-heading")).toHaveTextContent("Create Note");
 
     // Fill out form
     await user.type(getNoteTitleInput(), "Shopping List");
@@ -100,11 +111,11 @@ describe("Notes App UI", () => {
     // Wait for sidebar update, new note first
     await waitFor(() => {
       const notes = getSidebarNotes();
-      expect(within(notes[0]).getByText("Shopping List")).toBeInTheDocument();
+      expect(within(notes[0]).getByTestId(/^sidebar-note-title-/)).toHaveTextContent("Shopping List");
     });
     // Main content reflects new note
-    expect(screen.getByText("Shopping List")).toBeInTheDocument();
-    expect(screen.getByText(/milk/i)).toBeInTheDocument();
+    expect(screen.getByTestId("note-display-title")).toHaveTextContent("Shopping List");
+    expect(screen.getByTestId("note-display-content")).toHaveTextContent(/milk/i);
   });
 
   test("Create note - empty title triggers alert, does not save", async () => {
@@ -116,7 +127,7 @@ describe("Notes App UI", () => {
     await user.click(getSaveButton());
     expect(window.alert).toBeCalledWith(expect.stringMatching(/title cannot be empty/i));
     // Remains on form (not main view)
-    expect(screen.getByRole("heading", { name: /create note/i })).toBeInTheDocument();
+    expect(screen.getByTestId("note-form-heading")).toHaveTextContent("Create Note");
   });
 
   test("Edit a note, changes saved and listed correctly", async () => {
@@ -133,7 +144,7 @@ describe("Notes App UI", () => {
     await user.click(getSidebarNotes()[0]);
     await user.click(getEditButton());
     // Should see edit form prefilled
-    expect(screen.getByRole("heading", { name: /edit note/i })).toBeInTheDocument();
+    expect(screen.getByTestId("note-form-heading")).toHaveTextContent("Edit Note");
     expect(getNoteTitleInput()).toHaveValue(expect.stringContaining("Welcome"));
 
     // Edit title and content
@@ -145,12 +156,12 @@ describe("Notes App UI", () => {
 
     // The title is updated in both main and sidebar; wait for sidebar/main updates
     await waitFor(() => {
-      expect(screen.getByText("First Welcome (Edited)")).toBeInTheDocument();
+      expect(screen.getByTestId("note-display-title")).toHaveTextContent("First Welcome (Edited)");
     });
-    expect(screen.getByText("All new content")).toBeInTheDocument();
+    expect(screen.getByTestId("note-display-content")).toHaveTextContent("All new content");
     // The sidebar note title updated (target only in sidebar)
-    const sidebarNotes = screen.getAllByText("First Welcome (Edited)");
-    expect(sidebarNotes.length).toBeGreaterThan(0);
+    const sidebarTitles = screen.getAllByText("First Welcome (Edited)");
+    expect(sidebarTitles.length).toBeGreaterThan(0);
   });
 
   test("Delete a note removes it from sidebar and main view", async () => {
@@ -175,13 +186,13 @@ describe("Notes App UI", () => {
   });
 
   test("Sidebar search filters notes live", async () => {
-    const { getSearchInput, getSidebarNotes, getCreateButton } = setup();
+    const { getSearchInput, getSidebarNotes, getCreateButton, getNoteTitleInput, getSaveButton } = setup();
     const user = userEvent.setup();
 
     // Add one more note for clear difference
     await user.click(getCreateButton());
-    await user.type(screen.getByPlaceholderText(/title/i), "Banana Bread Recipe");
-    await user.click(screen.getByRole("button", { name: /^save$/i }));
+    await user.type(getNoteTitleInput(), "Banana Bread Recipe");
+    await user.click(getSaveButton());
 
     // Search for "features" - only that note should be visible
     await user.type(getSearchInput(), "features");
@@ -190,7 +201,7 @@ describe("Notes App UI", () => {
       visibleNotes = getSidebarNotes();
       expect(visibleNotes).toHaveLength(1);
     });
-    expect(within(visibleNotes[0]).getByText(/features/i)).toBeInTheDocument();
+    expect(within(visibleNotes[0]).getByTestId(/^sidebar-note-title-/)).toHaveTextContent(/features/i);
 
     // Search for "banana"
     await user.clear(getSearchInput());
@@ -199,7 +210,7 @@ describe("Notes App UI", () => {
       visibleNotes = getSidebarNotes();
       expect(visibleNotes).toHaveLength(1);
     });
-    expect(within(visibleNotes[0]).getByText(/banana bread recipe/i)).toBeInTheDocument();
+    expect(within(visibleNotes[0]).getByTestId(/^sidebar-note-title-/)).toHaveTextContent(/banana bread recipe/i);
 
     // Search not found
     await user.clear(getSearchInput());
@@ -215,21 +226,22 @@ describe("Notes App UI", () => {
     // Set window innerWidth <= 768 for mobile sidebar state
     Object.defineProperty(window, "innerWidth", { writable: true, configurable: true, value: 500});
     window.dispatchEvent(new Event("resize"));
-    const { getSidebar } = setup();
+    const { getSidebar, getSidebarFab } = setup();
     const user = userEvent.setup();
 
     // Sidebar starts closed
     expect(getSidebar().className).not.toMatch(/open/);
 
     // Open sidebar via FAB
-    const sidebarFab = screen.getByRole("button", { name: /open navigation/i, hidden: true });
+    const sidebarFab = getSidebarFab();
+    expect(sidebarFab).toBeInTheDocument();
     await user.click(sidebarFab);
     await waitFor(() =>
       expect(getSidebar().className).toMatch(/open/)
     );
 
     // Close sidebar using sidebar toggle button
-    const navBtn = within(getSidebar()).getByRole("button", { name: /close navigation/i });
+    const navBtn = screen.getByTestId("sidebar-toggle");
     await user.click(navBtn);
     await waitFor(() =>
       expect(getSidebar().className).not.toMatch(/open/)
@@ -241,13 +253,14 @@ describe("Notes App UI", () => {
       getCreateButton,
       getCancelButton,
       getEditButton,
-      getMainContent
+      getMainContent,
+      getSidebarNotes,
     } = setup();
     const user = userEvent.setup();
 
     // Test create cancel
     await user.click(getCreateButton());
-    expect(screen.getByRole("heading", { name: /create note/i })).toBeInTheDocument();
+    expect(screen.getByTestId("note-form-heading")).toHaveTextContent("Create Note");
     await user.click(getCancelButton());
     await waitFor(() =>
       expect(getMainContent()).toHaveTextContent(/select a note/i)
@@ -255,7 +268,7 @@ describe("Notes App UI", () => {
 
     // Test edit cancel
     // Select note, click edit
-    await user.click(screen.getAllByRole("listitem")[0]);
+    await user.click(getSidebarNotes()[0]);
     await user.click(getEditButton());
     await user.click(getCancelButton());
     await waitFor(() =>
@@ -266,11 +279,11 @@ describe("Notes App UI", () => {
   test("Clicking 'React Notes App' footer link opens correct URL", async () => {
     setup();
     // Link in sidebar footer
-    const sidebar = screen.getByRole("navigation");
-    const link = within(sidebar).getByRole("link", { name: /react notes app/i });
-    expect(link).toHaveAttribute("href", "https://reactjs.org/");
-    expect(link).toHaveAttribute("target", "_blank");
-    expect(link).toHaveAttribute("rel", "noopener noreferrer");
+    const footerLink = screen.getByTestId("sidebar-footer-link");
+    expect(footerLink).toHaveAttribute("href", "https://reactjs.org/");
+    expect(footerLink).toHaveAttribute("target", "_blank");
+    expect(footerLink).toHaveAttribute("rel", "noopener noreferrer");
+    expect(footerLink).toHaveTextContent("React Notes App");
   });
 
   test("Dates displayed in human-readable format", async () => {
@@ -285,12 +298,13 @@ describe("Notes App UI", () => {
     const notes = getSidebarNotes();
     for (let li of notes) {
       // Should have something like: 4/12/2024 10:43
-      const dateEl = within(li).getByText(/\d{1,2}\/\d{1,2}\/\d{2,4}/);
-      expect(dateEl).toBeInTheDocument();
+      expect(
+        within(li).getByText(/\d{1,2}\/\d{1,2}\/\d{2,4}/)
+      ).toBeInTheDocument();
     }
 
     // Main view date format
     await user.click(notes[0]);
-    expect(screen.getByText(/last updated/i).textContent).toMatch(/\d{1,2}\/\d{1,2}\/\d{2,4}/);
+    expect(screen.getByTestId("note-display-date").textContent).toMatch(/\d{1,2}\/\d{1,2}\/\d{2,4}/);
   });
 });
