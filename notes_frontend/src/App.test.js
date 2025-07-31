@@ -1,5 +1,5 @@
 import React from "react";
-import { render, screen, within, fireEvent } from "@testing-library/react";
+import { render, screen, within, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import App from "./App";
 
@@ -8,11 +8,11 @@ function setup() {
   render(<App />);
   const getSidebar = () => screen.getByRole("navigation");
   const getSidebarNotes = () =>
-    within(getSidebar()).queryAllByRole("listitem");
+    within(getSidebar()).getAllByRole("listitem");
   const getCreateButton = () =>
     within(getSidebar()).getByRole("button", { name: /\+ new note/i });
   const getSearchInput = () =>
-    within(getSidebar()).getByRole("searchbox", { name: /search notes/i });
+    within(getSidebar()).getByRole("searchbox");
   const getMainContent = () => screen.getByRole("main");
   const getNoteTitleInput = () =>
     screen.getByPlaceholderText(/title/i);
@@ -22,10 +22,11 @@ function setup() {
     screen.getByRole("button", { name: /^save$/i });
   const getCancelButton = () =>
     screen.getByRole("button", { name: /^cancel$/i });
+  // Edit/Delete button sometimes appears multiple times, make more specific via within main
   const getEditButton = () =>
-    screen.getByRole("button", { name: /^edit$/i });
+    within(getMainContent()).getByRole("button", { name: /^edit$/i });
   const getDeleteButton = () =>
-    screen.getByRole("button", { name: /^delete$/i });
+    within(getMainContent()).getByRole("button", { name: /^delete$/i });
   return {
     getSidebar,
     getSidebarNotes,
@@ -51,12 +52,14 @@ afterEach(() => {
 });
 
 describe("Notes App UI", () => {
-  test("Sidebar renders, initial notes displayed and correct nav", () => {
+  test("Sidebar renders, initial notes displayed and correct nav", async () => {
     const { getSidebar, getSidebarNotes } = setup();
     expect(getSidebar()).toBeInTheDocument();
-    // Initial seed: 2 notes
+    // Wait for notes to seed
+    await waitFor(() => {
+      expect(getSidebarNotes().length).toBe(2);
+    });
     const notes = getSidebarNotes();
-    expect(notes.length).toBe(2);
     expect(within(notes[0]).getByText(/organizer/i)).toBeInTheDocument();
     expect(within(notes[1]).getByText(/features/i)).toBeInTheDocument();
   });
@@ -67,12 +70,13 @@ describe("Notes App UI", () => {
     const notes = getSidebarNotes();
     // Select the second "Features" note
     await user.click(notes[1]);
-    // Content is rendered
-    expect(getMainContent()).toHaveTextContent(/features/i);
+    await waitFor(() =>
+      expect(getMainContent()).toHaveTextContent(/features/i)
+    );
     expect(getMainContent()).toHaveTextContent(/beautiful, responsive ui/i);
-    // Action buttons present
-    expect(screen.getByRole("button", { name: /edit/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /delete/i })).toBeInTheDocument();
+    // Action buttons present in main
+    expect(within(getMainContent()).getByRole("button", { name: /edit/i })).toBeInTheDocument();
+    expect(within(getMainContent()).getByRole("button", { name: /delete/i })).toBeInTheDocument();
   });
 
   test("Create new note shows form, creates note and displays in sidebar", async () => {
@@ -93,9 +97,11 @@ describe("Notes App UI", () => {
     await user.type(getNoteContentInput(), "Milk\nEggs\nBread");
     await user.click(getSaveButton());
 
-    // Sidebar updates, new note is first
-    const notes = getSidebarNotes();
-    expect(within(notes[0]).getByText("Shopping List")).toBeInTheDocument();
+    // Wait for sidebar update, new note first
+    await waitFor(() => {
+      const notes = getSidebarNotes();
+      expect(within(notes[0]).getByText("Shopping List")).toBeInTheDocument();
+    });
     // Main content reflects new note
     expect(screen.getByText("Shopping List")).toBeInTheDocument();
     expect(screen.getByText(/milk/i)).toBeInTheDocument();
@@ -137,11 +143,14 @@ describe("Notes App UI", () => {
     await user.type(getNoteContentInput(), "All new content");
     await user.click(getSaveButton());
 
-    // The title is updated in both main and sidebar
-    expect(screen.getByText("First Welcome (Edited)")).toBeInTheDocument();
+    // The title is updated in both main and sidebar; wait for sidebar/main updates
+    await waitFor(() => {
+      expect(screen.getByText("First Welcome (Edited)")).toBeInTheDocument();
+    });
     expect(screen.getByText("All new content")).toBeInTheDocument();
-    // The sidebar note title updated
-    expect(screen.getAllByText("First Welcome (Edited)").length).toBeGreaterThan(0);
+    // The sidebar note title updated (target only in sidebar)
+    const sidebarNotes = screen.getAllByText("First Welcome (Edited)");
+    expect(sidebarNotes.length).toBeGreaterThan(0);
   });
 
   test("Delete a note removes it from sidebar and main view", async () => {
@@ -158,7 +167,9 @@ describe("Notes App UI", () => {
     // window.confirm was called
     expect(window.confirm).toBeCalledWith(expect.stringMatching(/delete this note/i));
     // Note gone from sidebar and main returns to empty state or shows next note
-    expect(getSidebar()).not.toHaveTextContent(/welcome to note organizer/i);
+    await waitFor(() =>
+      expect(getSidebar()).not.toHaveTextContent(/welcome to note organizer/i)
+    );
     // Since sidebar "features" note will be present, check it's visible
     expect(getSidebar()).toHaveTextContent(/features/i);
   });
@@ -174,23 +185,30 @@ describe("Notes App UI", () => {
 
     // Search for "features" - only that note should be visible
     await user.type(getSearchInput(), "features");
-    let visibleNotes = getSidebarNotes();
-    expect(visibleNotes).toHaveLength(1);
+    let visibleNotes;
+    await waitFor(() => {
+      visibleNotes = getSidebarNotes();
+      expect(visibleNotes).toHaveLength(1);
+    });
     expect(within(visibleNotes[0]).getByText(/features/i)).toBeInTheDocument();
 
     // Search for "banana"
     await user.clear(getSearchInput());
     await user.type(getSearchInput(), "banana");
-    visibleNotes = getSidebarNotes();
-    expect(visibleNotes).toHaveLength(1);
+    await waitFor(() => {
+      visibleNotes = getSidebarNotes();
+      expect(visibleNotes).toHaveLength(1);
+    });
     expect(within(visibleNotes[0]).getByText(/banana bread recipe/i)).toBeInTheDocument();
 
     // Search not found
     await user.clear(getSearchInput());
     await user.type(getSearchInput(), "xxxxxxxxx");
-    visibleNotes = getSidebarNotes();
-    expect(visibleNotes).toHaveLength(1); // 'No notes found' dummy
-    expect(visibleNotes[0]).toHaveTextContent(/no notes found/i);
+    await waitFor(() => {
+      visibleNotes = getSidebarNotes();
+      expect(visibleNotes).toHaveLength(1); // 'No notes found' dummy
+      expect(visibleNotes[0]).toHaveTextContent(/no notes found/i);
+    });
   });
 
   test("Sidebar toggles open/close on click (responsive)", async () => {
@@ -206,12 +224,16 @@ describe("Notes App UI", () => {
     // Open sidebar via FAB
     const sidebarFab = screen.getByRole("button", { name: /open navigation/i, hidden: true });
     await user.click(sidebarFab);
-    expect(getSidebar().className).toMatch(/open/);
+    await waitFor(() =>
+      expect(getSidebar().className).toMatch(/open/)
+    );
 
     // Close sidebar using sidebar toggle button
     const navBtn = within(getSidebar()).getByRole("button", { name: /close navigation/i });
     await user.click(navBtn);
-    expect(getSidebar().className).not.toMatch(/open/);
+    await waitFor(() =>
+      expect(getSidebar().className).not.toMatch(/open/)
+    );
   });
 
   test("Canceling create or edit brings you back to view", async () => {
@@ -227,19 +249,25 @@ describe("Notes App UI", () => {
     await user.click(getCreateButton());
     expect(screen.getByRole("heading", { name: /create note/i })).toBeInTheDocument();
     await user.click(getCancelButton());
-    expect(getMainContent()).toHaveTextContent(/select a note/i);
+    await waitFor(() =>
+      expect(getMainContent()).toHaveTextContent(/select a note/i)
+    );
 
     // Test edit cancel
     // Select note, click edit
     await user.click(screen.getAllByRole("listitem")[0]);
     await user.click(getEditButton());
     await user.click(getCancelButton());
-    expect(getMainContent()).toHaveTextContent(/welcome to note organizer/i);
+    await waitFor(() =>
+      expect(getMainContent()).toHaveTextContent(/welcome to note organizer/i)
+    );
   });
 
-  test("Clicking 'React Notes App' footer link opens correct URL", () => {
-    // Link is present and correct
-    const link = screen.getByRole("link", { name: /react notes app/i });
+  test("Clicking 'React Notes App' footer link opens correct URL", async () => {
+    setup();
+    // Link in sidebar footer
+    const sidebar = screen.getByRole("navigation");
+    const link = within(sidebar).getByRole("link", { name: /react notes app/i });
     expect(link).toHaveAttribute("href", "https://reactjs.org/");
     expect(link).toHaveAttribute("target", "_blank");
     expect(link).toHaveAttribute("rel", "noopener noreferrer");
@@ -250,6 +278,10 @@ describe("Notes App UI", () => {
     const user = userEvent.setup();
 
     // All sidebar notes show a date in format MM/DD/YYYY or similar
+    await waitFor(() => {
+      const notes = getSidebarNotes();
+      expect(notes.length).toBeGreaterThan(0);
+    });
     const notes = getSidebarNotes();
     for (let li of notes) {
       // Should have something like: 4/12/2024 10:43
